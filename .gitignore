@@ -13,3 +13,5 @@ demo/tmp
 demo/outputs
 wasl4
 *.mp4
+*.jpg
+source_images

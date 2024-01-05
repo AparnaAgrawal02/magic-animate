@@ -164,8 +164,9 @@ def main(args):
     if not os.path.exists("videos_selected.txt"):
         for x in labels:
             to_make = 10
-            if os.path.exists("/ssd_scratch/cvit/aparna/magicanimate/samples/"+str(x)):
-                to_make -= len(os.listdir("/ssd_scratch/cvit/aparna/magicanimate/samples/"+str(x)))
+
+            if os.path.exists("/ssd_scratch/cvit/aparna/magicanimate/samples/wasl4/videos/"+str(x)):
+                to_make -= len(os.listdir("/ssd_scratch/cvit/aparna/magicanimate/samples//wasl4/videos/"+str(x)))
         # print("to_make: ", to_make, "count[x]: ", count[x],x)
             if to_make > 0:
                 # print(videolists)
@@ -187,7 +188,11 @@ def main(args):
         for x in dict1:
             test_videos.extend(dict1[x].split(","))
     random_seeds = random_seeds * len(test_videos) if len(random_seeds) == 1 else random_seeds
-    test_videos = [os.path.join("/ssd_scratch/cvit/aparna/dataset/WLASL/video/train", str(x)+".mp4") for x in test_videos]
+    #5 len name 
+    if len(str(x)) < 5:
+        x = "0"*(5-len(str(x)))+str(x)
+    
+    test_videos = [os.path.join("/ssd_scratch/cvit/aparna/dataset/WLASL/video/train",str(x)+".mp4") for x in test_videos]
     all_videos = videolists["video"].tolist()
     print("all_videos: ", all_videos)
    # breakpoint()
@@ -234,6 +239,10 @@ def main(args):
         total=len(test_videos), 
         disable=(args.rank!=0)
     ):
+        v_name = test_video.split("/")[-1].split(".")[0]
+        if len(str(v_name)) < 5:
+            v_name = "0"*(5-len(str(v_name)))+str(v_name)
+        test_video = os.path.join("/ssd_scratch/cvit/aparna/dataset/WLASL/video/train",str(v_name)+".mp4")
         print(f"Processing {test_video} ...")
         print(f"current seed: {torch.initial_seed()}")
         print(f"image: {source_image}")
@@ -290,9 +299,9 @@ def main(args):
         ).videos
 
         if args.rank == 0:
-            source_images = np.array([source_image] * original_length)
-            source_images = rearrange(torch.from_numpy(source_images), "t h w c -> 1 c t h w") / 255.0
-            samples_per_video.append(source_images)
+            source_images1 = np.array([source_image] * original_length)
+            source_images1 = rearrange(torch.from_numpy(source_images1), "t h w c -> 1 c t h w") / 255.0
+            samples_per_video.append(source_images1)
             
             control = control / 255.0
             control = rearrange(control, "t h w c -> 1 c t h w")
@@ -306,7 +315,7 @@ def main(args):
             video_name = os.path.basename(test_video)[:-4]
             source_name = os.path.basename(source_images[idx]).split(".")[0]
             print(f"Saving video {video_name} ...")
-            save_videos_grid(samples_per_video[-1:], f"{savedir}/{label}/{source_name}_{video_name}.mp4")
+            save_videos_grid(samples_per_video[-1:], f"{savedir}/videos/{label}/{source_name}_{video_name}.mp4")
             #save_videos_grid(samples_per_video, f"{savedir}/videos/{source_name}_{video_name}/grid.mp4")
 
             if config.save_individual_videos:
