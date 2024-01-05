@@ -6,7 +6,7 @@ pretrained_unet_path: ""
 
 motion_module: "pretrained_models/MagicAnimate/temporal_attention/temporal_attention.ckpt"
 
-savename: null
+savename: wasl4
 
 fusion_blocks: "midup"
 
@@ -28,7 +28,7 @@ video_path:
   - "inputs/applications/driving/densepose/multi_dancing.mp4"
 
 inference_config: "configs/inference/inference.yaml"
-size: 512
+size: 256
 L:    16
 S:    1 
 I:    0

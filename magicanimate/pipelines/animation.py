@@ -12,9 +12,10 @@ import argparse
 import datetime
 import inspect
 import os
+import cv2
 import random
 import numpy as np
-
+import pandas as pd
 from PIL import Image
 from omegaconf import OmegaConf
 from collections import OrderedDict
@@ -104,6 +105,8 @@ def main(args):
         scheduler=DDIMScheduler(**OmegaConf.to_container(inference_config.noise_scheduler_kwargs)),
         # NOTE: UniPCMultistepScheduler
     )
+    #pipeline.enable_vae_slicing()
+    
 
     # 1. unet ckpt
     # 1.1 motion module
@@ -142,12 +145,82 @@ def main(args):
     
     random_seeds = config.get("seed", [-1])
     random_seeds = [random_seeds] if isinstance(random_seeds, int) else list(random_seeds)
-    random_seeds = random_seeds * len(config.source_image) if len(random_seeds) == 1 else random_seeds
     
     # input test videos (either source video/ conditions)
+    #open ../../video_label.py and ../../ label_curr-count_req-count.txt
+    #randomly select 
+    #print pwd 
+   # print("current working directory: ", os.getcwd())
+    videolists = pd.read_csv("video_label.txt", sep="\t")
+    print(videolists)
+    print(videolists.columns)
+    # breakpoint()
+    count = videolists["label"].value_counts()
+    labels = count.keys().tolist()
+    dict1 = {}
+    test_videos = []
+    source_images = []
+    parallel_labels = []
+    if not os.path.exists("videos_selected.txt"):
+        for x in labels:
+            to_make = 10
+            if os.path.exists("/ssd_scratch/cvit/aparna/magicanimate/samples/"+str(x)):
+                to_make -= len(os.listdir("/ssd_scratch/cvit/aparna/magicanimate/samples/"+str(x)))
+        # print("to_make: ", to_make, "count[x]: ", count[x],x)
+            if to_make > 0:
+                # print(videolists)
+                # print("dfdfd",videolists["label"])
+                # print(videolists[videolists["label"] == x])
+                videos_to =videolists[videolists["label"] == x].sample(to_make, replace=True)
+                videos = videos_to["video"].tolist()
+                test_videos.extend(videos)
+                parallel_labels.extend([x]*len(videos))
+                dict1[x] = videos
+        #save dict1 t o a file
+        pd.DataFrame.from_dict(dict1, orient='index').to_csv("videos_selected.txt", sep="\t", header=False)
+    #choose len(test_videos) number of videos from videolist and take first image as source image and save in source_images
+    #print("test_videos: ", test_videos)
+    else:
+        dict1 = pd.read_csv("videos_selected.txt", sep="\t", header=None)
+        dict1 = dict1.to_dict()
+        dict1 = dict1[0]
+        for x in dict1:
+            test_videos.extend(dict1[x].split(","))
+    random_seeds = random_seeds * len(test_videos) if len(random_seeds) == 1 else random_seeds
+    test_videos = [os.path.join("/ssd_scratch/cvit/aparna/dataset/WLASL/video/train", str(x)+".mp4") for x in test_videos]
+    all_videos = videolists["video"].tolist()
+    print("all_videos: ", all_videos)
+   # breakpoint()
+    if not os.path.exists("source_images"):
+        os.mkdir("source_images")
+    for x in test_videos:
+        print(x)
+        x = x.split("/")[-1].split(".")[0]
+        print(x)
+        #breakpoint()
+        all_videos = videolists["video"].tolist()
+        all_videos.remove(int(x))
+        selected = random.choice(all_videos)
+        video = os.path.join("/ssd_scratch/cvit/aparna/dataset/WLASL/video/train", str(selected)+".mp4")
+        print("video: ", video)
+        cap = cv2.VideoCapture(video)
+        ret, frame = cap.read()
+        if not ret:
+            print("error in reading video")
+            continue
+
+        cv2.imwrite("source_images/"+x+"_"+str(selected)+".jpg", frame)
+        source_images.append("source_images/"+x+"_"+str(selected)+".jpg")
+        cap.release()
+        cv2.destroyAllWindows()
+
+
     
-    test_videos = config.video_path
-    source_images = config.source_image
+    print("test_videos: ", test_videos)
+    print("source_images: ", source_images)
+    # breakpoint()
+    # test_videos = videolists["video"].tolist()
+    # source_images = config.source_image
     num_actual_inference_steps = config.get("num_actual_inference_steps", config.steps)
 
     # read size, step from yaml file
@@ -156,11 +229,14 @@ def main(args):
 
     config.random_seed = []
     prompt = n_prompt = ""
-    for idx, (source_image, test_video, random_seed, size, step) in tqdm(
-        enumerate(zip(source_images, test_videos, random_seeds, sizes, steps)), 
+    for idx, (source_image, test_video, random_seed, size, step,label) in tqdm(
+        enumerate(zip(source_images, test_videos, random_seeds, sizes, steps,parallel_labels)), 
         total=len(test_videos), 
         disable=(args.rank!=0)
     ):
+        print(f"Processing {test_video} ...")
+        print(f"current seed: {torch.initial_seed()}")
+        print(f"image: {source_image}")
         samples_per_video = []
         samples_per_clip = []
         # manually set random seed for reproduction
@@ -228,9 +304,10 @@ def main(args):
             samples_per_video = torch.cat(samples_per_video)
 
             video_name = os.path.basename(test_video)[:-4]
-            source_name = os.path.basename(config.source_image[idx]).split(".")[0]
-            save_videos_grid(samples_per_video[-1:], f"{savedir}/videos/{source_name}_{video_name}.mp4")
-            save_videos_grid(samples_per_video, f"{savedir}/videos/{source_name}_{video_name}/grid.mp4")
+            source_name = os.path.basename(source_images[idx]).split(".")[0]
+            print(f"Saving video {video_name} ...")
+            save_videos_grid(samples_per_video[-1:], f"{savedir}/{label}/{source_name}_{video_name}.mp4")
+            #save_videos_grid(samples_per_video, f"{savedir}/videos/{source_name}_{video_name}/grid.mp4")
 
             if config.save_individual_videos:
                 save_videos_grid(samples_per_video[1:2], f"{savedir}/videos/{source_name}_{video_name}/ctrl.mp4")
